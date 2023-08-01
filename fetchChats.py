@@ -94,8 +94,8 @@ class Migration(db.Model):
     page_id = db.Column(db.Integer)
     last_record = db.Column(db.String)
 
-    def __init__(self, last_page, last_record):
-        self.last_page = last_page
+    def __init__(self, page_id, last_record):
+        self.page_id = page_id
         self.last_record = last_record
 
 
