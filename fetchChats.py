@@ -254,9 +254,9 @@ def get_chats(token, page_id=None):
                 created_at = datetime.strptime(
                     chat['thread']['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 users = chat['users']
-                user_ids = [user['id'] for user in users if id in user]
-                user_names = [user['name'] for user in users if 'name' in user]
-                user_emails = [user['email'] for user in users if 'email' in user]
+                user_ids = [user['id'] for user in users]
+                user_names = [user['name'] for user in users]
+                user_emails = [user['email'] for user in users]
                 chat_text = [event['text'] for event in chat['thread']
                              ['events'] if event['type'] == 'message']
 
