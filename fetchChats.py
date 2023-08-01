@@ -45,7 +45,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URI') or 'http://localhost:8088/callback'
-CREATE_JSON_FILES = os.getenv('CREATE_JSON_FILES')
+CREATE_JSON_FILES = os.getenv('CREATE_JSON_FILES') or "0"
 CHAT_COUNT = 0
 
 app = Flask(__name__)
@@ -261,8 +261,8 @@ def get_chats(token, page_id=None, last_record=None):
                     chat['thread']['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 users = chat['users']
                 user_ids = [user['id'] for user in users]
-                user_names = [user['name'] for user in users]
-                user_emails = [user['email'] for user in users]
+                user_names = [user.get('name', 'None') for user in users]
+                user_emails = [user.get('email', 'None') for user in users]
                 chat_text = [event['text'] for event in chat['thread']
                              ['events'] if event['type'] == 'message']
 
@@ -280,9 +280,14 @@ def get_chats(token, page_id=None, last_record=None):
                 if existing_chat is None:
                     new_chat = Chat(id, created_at, user_ids[0], user_ids[1] if len(
                         user_ids) > 1 else None)
-                    db.session.add(new_chat)
-                    db.session.commit()
-                    CHAT_COUNT = CHAT_COUNT+1 #Aumenta el contador sólo cuando no es un chat repetido o que se omite
+                    try:
+                        db.session.add(new_chat)
+                        db.session.commit()
+                        CHAT_COUNT = CHAT_COUNT+1 #Aumenta el contador sólo cuando no es un chat repetido o que se omite
+                    except Exception as e:
+                        logger.error(f'Error on update dataBase with {new_chat}')
+                        logger.error('Error occurred: {}'.format(e))
+                        return None, last_record
 
                 for message_text in chat_text:
                     new_message = Message(id, message_text)
