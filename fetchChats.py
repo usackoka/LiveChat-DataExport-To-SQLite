@@ -244,8 +244,7 @@ def get_chats(token, page=None, last_record=None):
             # Actualiza el último registro migrado
             last_record = chats[-1]['id'] if chats else last_record
 
-            for chat in chats:    
-                CHAT_COUNT = CHAT_COUNT+1
+            for chat in chats:
                 id = chat['id']
                 created_at = datetime.strptime(
                     chat['thread']['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -272,6 +271,7 @@ def get_chats(token, page=None, last_record=None):
                         user_ids) > 1 else None)
                     db.session.add(new_chat)
                     db.session.commit()
+                    CHAT_COUNT = CHAT_COUNT+1 #Aumenta el contador sólo cuando no es un chat repetido o que se omite
 
                 for message_text in chat_text:
                     new_message = Message(id, message_text)
