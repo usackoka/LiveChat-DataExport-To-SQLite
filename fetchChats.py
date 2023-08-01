@@ -91,7 +91,7 @@ class Message(db.Model):
 
 class Migration(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    last_page = db.Column(db.Integer)
+    page_id = db.Column(db.Integer)
     last_record = db.Column(db.String)
 
     def __init__(self, last_page, last_record):
@@ -208,28 +208,30 @@ def refresh_token_if_expired(code):
 
 def load_get_chats(token):
     global CHAT_COUNT
-    last_page, last_record = get_last_migration_info()
+    page_id, last_record = get_last_migration_info()
     while True:
-        last_page, last_record = get_chats(
-            token, last_page, last_record)
-        if last_page is None:
+        next_page_id, last_record = get_chats(
+            token, page_id, last_record)
+        page_id = next_page_id
+        if page_id is None:
             # Aquí el token ya pudo haber expirado o hubo algún error
             break
-        update_migration_info(last_page, last_record)
+        update_migration_info(page_id, last_record)
     return "Se han guardado " + str(CHAT_COUNT) + " chats en la base de datos."
 
 
-def get_chats(token, page=None, last_record=None):
+def get_chats(token, page_id=None, last_record=None):
     global CHAT_COUNT
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
     }
 
-    data = {
-        'limit': 100,  # Máximo permitido por LiveChat
-        'page': page or 1
-    }
+    data = {}
+
+    if page_id is not None:
+        logger.critical(f'Buscando siguiente página: {page_id} type: {type(page_id)}')
+        data['page_id'] = page_id
 
     try:
         response = requests.post(
@@ -243,7 +245,7 @@ def get_chats(token, page=None, last_record=None):
                 os.makedirs('JSONData')
 
             # Crear el nombre del archivo
-            filename = f'JSONData/chats-page{page}-{time.time()}.json'
+            filename = f'JSONData/chats-page{page_id}-{time.time()}.json'
 
             # Abrir el archivo para escribir
             with open(filename, 'w') as json_file:
@@ -285,12 +287,12 @@ def get_chats(token, page=None, last_record=None):
                 user_names_str = ' & '.join(user_names)
                 db.session.commit()
                 logger.info(
-                    f'--- No. (${CHAT_COUNT}) Guardado chat entre: {user_names_str}')
+                    f'--- No. ({CHAT_COUNT}) Guardado chat entre: {user_names_str}')
 
             # Actualiza el último registro migrado
             last_record = chats[-1]['id'] if chats else last_record
-            next_page = page + 1 if chats else None
-            return next_page, last_record
+            next_page_id = response.json().get('next_page_id')
+            return next_page_id, last_record
 
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(
@@ -308,7 +310,7 @@ def get_or_create_user(user_id, name, email):
         user = User(user_id, name, email)
         db.session.add(user)
         db.session.commit()
-        logger.debug(f'Creado usuario no existente: ${name} - ${email}')
+        logger.debug(f'Creado usuario no existente: {name} - {email}')
     return user
 
 
@@ -317,13 +319,13 @@ def get_last_migration_info():
     last_migration = db.session.query(
         Migration).order_by(Migration.id.desc()).first()
     if last_migration is None:
-        return 1, None  # Página predeterminada 1 y último registro None si no hay información de migración
-    return last_migration.last_page, last_migration.last_record
+        return None, None  # Página predeterminada None y último registro None si no hay información de migración
+    return last_migration.page_id, last_migration.last_record
 
 
-def update_migration_info(last_page, last_record):
+def update_migration_info(page_id, last_record):
     # Actualizar la información de migración
-    migration = Migration(last_page, last_record)
+    migration = Migration(page_id, last_record)
     db.session.add(migration)
     db.session.commit()
 
