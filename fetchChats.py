@@ -45,6 +45,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URI') or 'http://localhost:8088/callback'
+CREATE_JSON_FILES = os.getenv('CREATE_JSON_FILES')
 CHAT_COUNT = 0
 
 app = Flask(__name__)
@@ -222,6 +223,8 @@ def load_get_chats(token):
 
 def get_chats(token, page_id=None, last_record=None):
     global CHAT_COUNT
+    global CREATE_JSON_FILES
+
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -239,17 +242,18 @@ def get_chats(token, page_id=None, last_record=None):
 
         if response.status_code == 200:
             chats = response.json()['chats']
-            
-            # Crear el directorio si no existe
-            if not os.path.exists('JSONData'):
-                os.makedirs('JSONData')
 
-            # Crear el nombre del archivo
-            filename = f'JSONData/chats-page{page_id}-{time.time()}.json'
+            if CREATE_JSON_FILES == "1":
+                # Crear el directorio si no existe
+                if not os.path.exists('JSONData'):
+                    os.makedirs('JSONData')
 
-            # Abrir el archivo para escribir
-            with open(filename, 'w') as json_file:
-                json.dump(response.json(), json_file)
+                # Crear el nombre del archivo
+                filename = f'JSONData/chats-page{page_id}-{time.time()}.json'
+
+                # Abrir el archivo para escribir
+                with open(filename, 'w') as json_file:
+                    json.dump(response.json(), json_file)
 
             for chat in chats:
                 id = chat['id']
@@ -269,7 +273,7 @@ def get_chats(token, page_id=None, last_record=None):
 
                 for idx, user_id in enumerate(user_ids):
                     get_or_create_user(
-                        user_id, user_names[idx], user_emails[idx])
+                        user_id, user_names[idx] or None, user_emails[idx] or None)
 
                 existing_chat = db.session.get(Chat, id)
 
@@ -297,14 +301,14 @@ def get_chats(token, page_id=None, last_record=None):
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(
                 response.status_code, response.text))
-            return None, last_record, response
+            return None, last_record
 
     except Exception as e:
         logger.error('Error occurred: {}'.format(e))
-        return None, last_record, None
+        return None, last_record
 
 
-def get_or_create_user(user_id, name, email):
+def get_or_create_user(user_id, name='None', email='None'):
     user = db.session.get(User, user_id)
     if user is None:
         user = User(user_id, name, email)
