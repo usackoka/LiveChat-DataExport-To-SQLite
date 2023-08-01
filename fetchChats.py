@@ -6,7 +6,7 @@ import time
 from tqdm import tqdm
 import colorlog
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
@@ -96,6 +96,19 @@ class Migration(db.Model):
         self.last_page = last_page
         self.last_record = last_record
 
+class Token(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    access_token = db.Column(db.String, nullable=False)
+    refresh_token = db.Column(db.String, nullable=False)
+    expires_in = db.Column(db.Integer, nullable=False)
+    expiry_time = db.Column(db.DateTime, nullable=False)
+
+    def __init__(self, access_token, refresh_token, expires_in):
+        self.access_token = access_token
+        self.refresh_token = refresh_token
+        self.expires_in = expires_in
+        self.expiry_time = datetime.now() + timedelta(seconds=expires_in)
+
 
 # Create the chats table if it doesn't exist
 with app.app_context():
@@ -116,7 +129,7 @@ def callback():
     # Podemos obtener el código desde aquí y utilizarlo para obtener un token de acceso
     code = request.args.get('code')
     if code:
-        token = get_access_token(code)
+        token = refresh_token_if_expired()
         if token:
             result = load_get_chats(token)
             return "Token de acceso obtenido: " + token + ". " + result
@@ -139,10 +152,43 @@ def get_access_token(code):
     }
     response = requests.post(url, headers=headers, data=data)
     if response.status_code == 200:
-        return response.json().get('access_token')
+        token_info = response.json()
+        access_token = token_info.get('access_token')
+        refresh_token = token_info.get('refresh_token')
+        expires_in = token_info.get('expires_in')
+        token = Token(access_token, refresh_token, expires_in)
+        db.session.add(token)
+        db.session.commit()
+        return access_token
     else:
         return None
 
+def refresh_token_if_expired():
+    token = db.session.query(Token).order_by(Token.id.desc()).first()
+    if datetime.now() >= token.expiry_time:
+        logger.critical('Token expirado, refrescando...')
+        url = 'https://accounts.livechat.com/v2/token'
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = {
+            'grant_type': 'refresh_token',
+            'refresh_token': token.refresh_token,
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET,
+        }
+        response = requests.post(url, headers=headers, data=data)
+        if response.status_code == 200:
+            token_info = response.json()
+            new_access_token = token_info.get('access_token')
+            new_refresh_token = token_info.get('refresh_token')
+            new_expires_in = token_info.get('expires_in')
+            new_token = Token(new_access_token, new_refresh_token, new_expires_in)
+            db.session.add(new_token)
+            db.session.commit()
+            return new_access_token
+        else:
+            return None
+    else:
+        return token.access_token
 
 def load_get_chats(token):
     last_page, last_record = get_last_migration_info()
@@ -159,8 +205,6 @@ def load_get_chats(token):
                 # Algo salió mal. Sal del bucle.
                 break
         update_migration_info(last_page, last_record)
-        logger.debug('Delay de 5 segundos...')
-        time.sleep(5)  # Retraso de 5 segundos
     return "Se han guardado " + str(chat_count) + " chats en la base de datos."
 
 
