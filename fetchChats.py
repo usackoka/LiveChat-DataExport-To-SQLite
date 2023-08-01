@@ -236,7 +236,7 @@ def get_chats(token, page_id=None, last_record=None):
     data = {}
 
     if page_id is not None:
-        logger.critical(f'Buscando siguiente página: {page_id} type: {type(page_id)}')
+        logger.warning(f'Buscando siguiente página: {page_id} type: {type(page_id)}')
         data['page_id'] = page_id
 
     try:
@@ -284,6 +284,7 @@ def get_chats(token, page_id=None, last_record=None):
                     try:
                         db.session.add(new_chat)
                         db.session.commit()
+                        logger.info('Creando nuevo chat...')
                         CHAT_COUNT = CHAT_COUNT+1 #Aumenta el contador sólo cuando no es un chat repetido o que se omite
                     except Exception as e:
                         logger.error(f'Error on update dataBase with {new_chat}')
