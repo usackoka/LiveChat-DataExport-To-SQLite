@@ -198,8 +198,8 @@ def get_chats(token, page=None, last_record=None):
                              ['events'] if event['type'] == 'message']
 
                 if len(chat_text) <= 2:
-                    logger.warn(
-                        f'Omitiendo chat con (${len(chat_text)}) mensajes - Contenido: {" ".join(chat_text)}')
+                    logger.warning(
+                        f'Omitiendo chat por poco contenido')
                     continue
 
                 for idx, user_id in enumerate(user_ids):
@@ -241,7 +241,7 @@ def get_or_create_user(user_id, name, email):
         user = User(user_id, name, email)
         db.session.add(user)
         db.session.commit()
-        logger.info(f'Creado usuario no existente: ${name} - ${email}')
+        logger.debug(f'Creado usuario no existente: ${name} - ${email}')
     return user
 
 
