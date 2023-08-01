@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
+import json
 
 # Configura el manejador para la salida de la consola
 console_handler = colorlog.StreamHandler()
@@ -209,15 +210,11 @@ def load_get_chats(token):
     global CHAT_COUNT
     last_page, last_record = get_last_migration_info()
     while True:
-        last_page, last_record, response = get_chats(
+        last_page, last_record = get_chats(
             token, last_page, last_record)
         if last_page is None:
-            if response is not None and response.status_code != 200:
-                # Aquí el token ya pudo haber expirado
-                break
-            else:
-                # Algo salió mal. Sal del bucle.
-                break
+            # Aquí el token ya pudo haber expirado o hubo algún error
+            break
         update_migration_info(last_page, last_record)
     return "Se han guardado " + str(CHAT_COUNT) + " chats en la base de datos."
 
@@ -240,9 +237,17 @@ def get_chats(token, page=None, last_record=None):
 
         if response.status_code == 200:
             chats = response.json()['chats']
+            
+            # Crear el directorio si no existe
+            if not os.path.exists('JSONData'):
+                os.makedirs('JSONData')
 
-            # Actualiza el último registro migrado
-            last_record = chats[-1]['id'] if chats else last_record
+            # Crear el nombre del archivo
+            filename = f'JSONData/chats-page{page}-{time.time()}.json'
+
+            # Abrir el archivo para escribir
+            with open(filename, 'w') as json_file:
+                json.dump(response.json(), json_file)
 
             for chat in chats:
                 id = chat['id']
@@ -282,8 +287,10 @@ def get_chats(token, page=None, last_record=None):
                 logger.info(
                     f'--- No. (${CHAT_COUNT}) Guardado chat entre: {user_names_str}')
 
+            # Actualiza el último registro migrado
+            last_record = chats[-1]['id'] if chats else last_record
             next_page = page + 1 if chats else None
-            return next_page, last_record, response
+            return next_page, last_record
 
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(

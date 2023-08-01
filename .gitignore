@@ -1,5 +1,5 @@
 
 .env
-instance/livechat_data.db
+instance/*
+JSONData/*
 livechat_errors.log
-instance/livechat_data.db-journal
