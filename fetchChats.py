@@ -3,7 +3,6 @@ from flask import Flask, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 import requests
 import time
-from tqdm import tqdm
 import colorlog
 import logging
 from datetime import datetime, timedelta
