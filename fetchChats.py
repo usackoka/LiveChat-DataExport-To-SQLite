@@ -92,11 +92,9 @@ class Message(db.Model):
 class Migration(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     page_id = db.Column(db.Integer)
-    last_record = db.Column(db.String)
 
-    def __init__(self, page_id, last_record):
+    def __init__(self, page_id):
         self.page_id = page_id
-        self.last_record = last_record
 
 
 class Token(db.Model):
@@ -145,7 +143,7 @@ def load_status():
     last_migration = db.session.query(
         Migration).order_by(Migration.id.desc()).first()
     if last_migration:
-        return f"Última página cargada: {last_migration.last_page}. Último registro: {last_migration.last_record}."
+        return f"Última página cargada: {last_migration.page_id}."
     else:
         return "La carga de chats aún no ha comenzado."
 
@@ -208,19 +206,19 @@ def refresh_token_if_expired(code):
 
 def load_get_chats(token):
     global CHAT_COUNT
-    page_id, last_record = get_last_migration_info()
+    page_id = get_last_migration_info()
     while True:
-        next_page_id, last_record = get_chats(
-            token, page_id, last_record)
+        next_page_id = get_chats(
+            token, page_id)
         page_id = next_page_id
         if page_id is None:
             # Aquí el token ya pudo haber expirado o hubo algún error
             break
-        update_migration_info(page_id, last_record)
+        update_migration_info(page_id)
     return "Se han guardado " + str(CHAT_COUNT) + " chats en la base de datos."
 
 
-def get_chats(token, page_id=None, last_record=None):
+def get_chats(token, page_id=None):
     global CHAT_COUNT
     headers = {
         'Authorization': f'Bearer {token}',
@@ -289,19 +287,18 @@ def get_chats(token, page_id=None, last_record=None):
                 logger.info(
                     f'--- No. ({CHAT_COUNT}) Guardado chat entre: {user_names_str}')
 
-            # Actualiza el último registro migrado
-            last_record = chats[-1]['id'] if chats else last_record
+            # Actualiza a la siguiente página que tocará buscar
             next_page_id = response.json().get('next_page_id')
-            return next_page_id, last_record
+            return next_page_id
 
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(
                 response.status_code, response.text))
-            return None, last_record, response
+            return None, response
 
     except Exception as e:
         logger.error('Error occurred: {}'.format(e))
-        return None, last_record, None
+        return None, None
 
 
 def get_or_create_user(user_id, name, email):
@@ -320,12 +317,12 @@ def get_last_migration_info():
         Migration).order_by(Migration.id.desc()).first()
     if last_migration is None:
         return None, None  # Página predeterminada None y último registro None si no hay información de migración
-    return last_migration.page_id, last_migration.last_record
+    return last_migration.page_id
 
 
-def update_migration_info(page_id, last_record):
+def update_migration_info(page_id):
     # Actualizar la información de migración
-    migration = Migration(page_id, last_record)
+    migration = Migration(page_id)
     db.session.add(migration)
     db.session.commit()
 
