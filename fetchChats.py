@@ -68,10 +68,9 @@ class User(db.Model):
 
 class Chat(db.Model):
     id = db.Column(db.String, primary_key=True)
-    # nuevo campo para almacenar la fecha de creación
-    created_at = db.Column(db.DateTime)
     user_id = db.Column(db.String, db.ForeignKey('user.id'))
     agent_id = db.Column(db.String, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime)
 
     def __init__(self, id, created_at, user_id, agent_id):
         self.id = id
@@ -83,11 +82,15 @@ class Chat(db.Model):
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     chat_id = db.Column(db.String, db.ForeignKey('chat.id'), nullable=False)
+    author_id = db.Column(db.String, db.ForeignKey('user.id'))
     message = db.Column(db.String)
+    created_at = db.Column(db.DateTime)
 
-    def __init__(self, chat_id, message):
+    def __init__(self, chat_id, message, author_id, created_at):
         self.chat_id = chat_id
         self.message = message
+        self.message = author_id
+        self.created_at = created_at
 
 
 class Migration(db.Model):
@@ -263,13 +266,11 @@ def get_chats(token, page_id=None, last_record=None):
                 user_ids = [user['id'] for user in users]
                 user_names = [user.get('name', 'None') for user in users]
                 user_emails = [user.get('email', 'None') for user in users]
-                chat_text = [event['text'] for event in chat['thread']
-                             ['events'] if event['type'] == 'message']
-
-                if len(chat_text) <= 2:
-                    logger.warning(
-                        f'Omitiendo chat por poco contenido')
-                    continue
+                chat_messages = [{
+                    'text': event['text'], 
+                    'created_at': datetime.strptime(event['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ"), 
+                    'author_id': event['author_id']
+                } for event in chat['thread']['events'] if event['type'] == 'message']
 
                 for idx, user_id in enumerate(user_ids):
                     get_or_create_user(
@@ -289,8 +290,8 @@ def get_chats(token, page_id=None, last_record=None):
                         logger.error('Error occurred: {}'.format(e))
                         return None, last_record
 
-                for message_text in chat_text:
-                    new_message = Message(id, message_text)
+                for message_data in chat_messages:
+                    new_message = Message(id, message_data['text'], message_data['author_id'], message_data['created_at'])
                     db.session.add(new_message)
 
                 user_names_str = ' & '.join(user_names)
