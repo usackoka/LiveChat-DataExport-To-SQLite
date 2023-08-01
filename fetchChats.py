@@ -89,7 +89,7 @@ class Message(db.Model):
     def __init__(self, chat_id, message, author_id, created_at):
         self.chat_id = chat_id
         self.message = message
-        self.message = author_id
+        self.author_id = author_id
         self.created_at = created_at
 
 
