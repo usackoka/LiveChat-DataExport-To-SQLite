@@ -2,3 +2,4 @@
 .env
 instance/livechat_data.db
 livechat_errors.log
+instance/livechat_data.db-journal

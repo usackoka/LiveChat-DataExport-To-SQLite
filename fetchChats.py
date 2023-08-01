@@ -206,6 +206,7 @@ def refresh_token_if_expired(code):
 
 
 def load_get_chats(token):
+    global CHAT_COUNT
     last_page, last_record = get_last_migration_info()
     while True:
         last_page, last_record, response = get_chats(
@@ -222,6 +223,7 @@ def load_get_chats(token):
 
 
 def get_chats(token, page=None, last_record=None):
+    global CHAT_COUNT
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -242,7 +244,8 @@ def get_chats(token, page=None, last_record=None):
             # Actualiza el último registro migrado
             last_record = chats[-1]['id'] if chats else last_record
 
-            for chat in chats:
+            for chat in chats:    
+                CHAT_COUNT = CHAT_COUNT+1
                 id = chat['id']
                 created_at = datetime.strptime(
                     chat['thread']['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -269,7 +272,6 @@ def get_chats(token, page=None, last_record=None):
                         user_ids) > 1 else None)
                     db.session.add(new_chat)
                     db.session.commit()
-                    CHAT_COUNT = CHAT_COUNT+1
 
                 for message_text in chat_text:
                     new_message = Message(id, message_text)
@@ -286,11 +288,11 @@ def get_chats(token, page=None, last_record=None):
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(
                 response.status_code, response.text))
-            return None, last_record, response, 0
+            return None, last_record, response
 
     except Exception as e:
         logger.error('Error occurred: {}'.format(e))
-        return None, last_record, None, 0
+        return None, last_record, None
 
 
 def get_or_create_user(user_id, name, email):
