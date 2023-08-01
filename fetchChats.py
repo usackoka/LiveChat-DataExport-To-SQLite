@@ -44,6 +44,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URI') or 'http://localhost:8088/callback'
+CHAT_COUNT = 0
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///livechat_data.db'
@@ -96,6 +97,7 @@ class Migration(db.Model):
         self.last_page = last_page
         self.last_record = last_record
 
+
 class Token(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     access_token = db.Column(db.String, nullable=False)
@@ -125,11 +127,9 @@ def index():
 
 @app.route('/callback')
 def callback():
-    # Este es el punto final al que LiveChat redirigirá después de la autorización
-    # Podemos obtener el código desde aquí y utilizarlo para obtener un token de acceso
     code = request.args.get('code')
     if code:
-        token = refresh_token_if_expired()
+        token = refresh_token_if_expired(code)
         if token:
             result = load_get_chats(token)
             return "Token de acceso obtenido: " + token + ". " + result
@@ -137,6 +137,16 @@ def callback():
             return "No se pudo obtener el token de acceso"
     else:
         return "No se proporcionó código en la redirección"
+
+
+@app.route('/load_status')
+def load_status():
+    last_migration = db.session.query(
+        Migration).order_by(Migration.id.desc()).first()
+    if last_migration:
+        return f"Última página cargada: {last_migration.last_page}. Último registro: {last_migration.last_record}."
+    else:
+        return "La carga de chats aún no ha comenzado."
 
 
 def get_access_token(code):
@@ -163,9 +173,12 @@ def get_access_token(code):
     else:
         return None
 
-def refresh_token_if_expired():
+
+def refresh_token_if_expired(code):
     token = db.session.query(Token).order_by(Token.id.desc()).first()
-    if datetime.now() >= token.expiry_time:
+    if token is None:
+        return get_access_token(code)
+    elif datetime.now() >= token.expiry_time:
         logger.critical('Token expirado, refrescando...')
         url = 'https://accounts.livechat.com/v2/token'
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
@@ -181,7 +194,8 @@ def refresh_token_if_expired():
             new_access_token = token_info.get('access_token')
             new_refresh_token = token_info.get('refresh_token')
             new_expires_in = token_info.get('expires_in')
-            new_token = Token(new_access_token, new_refresh_token, new_expires_in)
+            new_token = Token(new_access_token,
+                              new_refresh_token, new_expires_in)
             db.session.add(new_token)
             db.session.commit()
             return new_access_token
@@ -190,13 +204,12 @@ def refresh_token_if_expired():
     else:
         return token.access_token
 
+
 def load_get_chats(token):
     last_page, last_record = get_last_migration_info()
-    chat_count = 0
     while True:
-        last_page, last_record, response, added_chats = get_chats(
+        last_page, last_record, response = get_chats(
             token, last_page, last_record)
-        chat_count += added_chats
         if last_page is None:
             if response is not None and response.status_code != 200:
                 # Aquí el token ya pudo haber expirado
@@ -205,7 +218,7 @@ def load_get_chats(token):
                 # Algo salió mal. Sal del bucle.
                 break
         update_migration_info(last_page, last_record)
-    return "Se han guardado " + str(chat_count) + " chats en la base de datos."
+    return "Se han guardado " + str(CHAT_COUNT) + " chats en la base de datos."
 
 
 def get_chats(token, page=None, last_record=None):
@@ -225,7 +238,6 @@ def get_chats(token, page=None, last_record=None):
 
         if response.status_code == 200:
             chats = response.json()['chats']
-            chat_count = len(chats)
 
             # Actualiza el último registro migrado
             last_record = chats[-1]['id'] if chats else last_record
@@ -257,6 +269,7 @@ def get_chats(token, page=None, last_record=None):
                         user_ids) > 1 else None)
                     db.session.add(new_chat)
                     db.session.commit()
+                    CHAT_COUNT = CHAT_COUNT+1
 
                 for message_text in chat_text:
                     new_message = Message(id, message_text)
@@ -264,10 +277,11 @@ def get_chats(token, page=None, last_record=None):
 
                 user_names_str = ' & '.join(user_names)
                 db.session.commit()
-                logger.info(f'Guardado chat entre: {user_names_str}')
+                logger.info(
+                    f'--- No. (${CHAT_COUNT}) Guardado chat entre: {user_names_str}')
 
             next_page = page + 1 if chats else None
-            return next_page, last_record, response, chat_count
+            return next_page, last_record, response
 
         else:
             logger.error('Failed to retrieve chats. Status code: {}. Response: {}'.format(
